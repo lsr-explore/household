@@ -1,4 +1,22 @@
 'use strict';
+
+//--------------------------
+// GENERATE_ID - begin
+// sourced from:  http://fiznool.com/blog/2014/11/16/short-id-generation-in-javascript/
+var ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+var ID_LENGTH = 5;
+
+var generateId = function() {
+  var rtn = '';
+  for (var i = 0; i < ID_LENGTH; i++) {
+    rtn += ALPHABET.charAt(Math.floor(Math.random() * ALPHABET.length));
+  }
+  return rtn;
+}
+// GENERATE_ID - end
+//--------------------------
+
 //--------------------------
 // LOG - begin
 var logger = {
@@ -70,6 +88,9 @@ var dataEventNames = {
 // DATASTORE - begin
 var DataStore = function() {
   this.initialCurrentMember = {
+    id: {
+      value: null
+    },
     relationship: {
       isValid: false,
       value: null
@@ -97,7 +118,6 @@ var DataStore = function() {
       sender
     })
     this.listeners.forEach(function(listener) {
-      console.log(listener.name)
       listener.onDataUpdate(dataEventName, sender);
     });
   }
@@ -159,10 +179,16 @@ var AddControl = function(store) {
 
   this.onAdd = function(evt) {
     evt.preventDefault();
-    logger.log(logger.level.DEBUG, 'Add data', this.store.currentMember);
+    logger.log(logger.level.DEBUG, 'Add data', this.store.data.currentMember);
+
+    var member = JSON.parse(JSON.stringify(this.store.data.currentMember));
+    var id = generateId();
+    member.id.value = id;
 
     this.store.postData(dataEventNames.memberAdded, {
-      currentMember: this.store.initialCurrentMember
+      household: {
+        [id]: member
+      }
     }, this.name);
 
     // Reset currentMember state
@@ -443,17 +469,65 @@ var SmokingControl = function(store) {
 //--------------------------
 // HOUSEHOLD CONTROL - begin
 var Household = function(store) {
+  this.name = 'Household';
   this.store = store;
   this.selector = 'div.builder';
   this.element = document.querySelector(this.selector);
-  this.name = 'Household';
+  this.hr = document.createElement('hr');
+  this.table = document.createElement('table');
+  this.tbody = document.createElement('tbody');
+  this.table.appendChild(this.tbody);
+  this.element.appendChild(this.hr);
+  this.element.appendChild(this.table);
 
-  this.drawTable = function() {
-    var table = document.createElement('table');
-    this.element.appendChild(table);
+  this.createHeader = function() {
+    var header = this.table.createTHead();
+    var row = header.insertRow(0);
+    row.insertCell(0).innerHTML = 'Id';
+    row.insertCell(1).innerHTML = 'Age';
+    row.insertCell(2).innerHTML = 'Relationship';
+    row.insertCell(3).innerHTML = 'Smoker?';
+    row.insertCell(4).innerHTML = 'Remove';
   }
-  this.addRecord = function() {
 
+  this.onClick = function(evt) {
+    console.log(evt)
+    
+    console.log(evt.target.attributes[0].value)
+  }
+
+  this.displayRecords = function() {
+    var household = this.store.data.household;
+    var tableRow;
+    this.tbody.innerHTML = '';
+    for (var key in household) {
+      var member = household[key];
+      tableRow = this.tbody.insertRow(-1);
+      var td = tableRow.insertCell(0)
+      td.setAttribute("align", "center");
+      td.innerHTML = member.id.value;
+
+      td = tableRow.insertCell(1);
+      td.setAttribute("align", "center");
+      td.innerHTML = member.age.value;
+
+      td = tableRow.insertCell(2);
+      td.setAttribute("align", "center");
+      td.innerHTML = member.relationship.value;
+
+      td = tableRow.insertCell(3);
+      td.setAttribute("align", "center");
+      td.innerHTML = member.smoking.value;
+
+      td = tableRow.insertCell(4);
+      td.setAttribute("align", "center");
+      var button = document.createElement('button');
+      button.innerHTML = 'X';
+      button.setAttribute('data-name', member.id.value);
+      button.addEventListener("click", this.onClick.bind(this));
+      td.appendChild(button);
+      
+    }
   }
 
   this.removeRecord = function() {
@@ -462,6 +536,9 @@ var Household = function(store) {
 
   this.onDataUpdate = function(dataEventName, sender) {
     switch(dataEventName) {
+      case dataEventNames.memberAdded:
+        this.displayRecords();
+        break;
       default:
         break;
     };
@@ -469,7 +546,7 @@ var Household = function(store) {
 
   this.initialize = function() {
     store.registerListener(this);
-    this.drawTable();
+    this.createHeader();
   }
 
   this.initialize();
@@ -515,7 +592,7 @@ var SavedHousehold = function(store) {
 //--------------------------
 
 //--------------------------
-//  STYLES - begin
+//  FORM STYLES - begin
 function createStyle(name, rules) {
   var style = document.querySelector('style');
   if ( !(style.sheet || {}).insertRule)  {
@@ -529,20 +606,18 @@ var styles = {
   'valid': 'valid',
   'invalid': 'invalid',
   'error': 'error'
-
 }
 
 function createStyles() {
-  createStyle('.' + styles.valid, "border-color: green;");
-  createStyle('.' + styles.invalid, "border-color: red;");
-  createStyle('.' + styles.error, "color: red;");
+  createStyle('.' + styles.valid, 'border-color: green;');
+  createStyle('.' + styles.invalid, 'border-color: red;');
+  createStyle('.' + styles.error, 'color: red;');
+  createStyle('table', 'border-collapse: collapse;');
+  createStyle('table, th, td', 'border: 1px solid darkgrey; padding: 5px;');
 }
 
 function showValidationState(element, valid, messageElement, message) {
-  // Clear the classess
-  element.className = element.className.replace(new RegExp(' ' + styles.valid, 'g'), '');
-  element.className = element.className.replace(new RegExp(' ' + styles.invalid, 'g'), '');
-  messageElement.className = messageElement.className.replace(new RegExp(' ' + styles.error, 'g'), '');
+  clearFormStyles(element, messageElement);
   if (valid){
     element.className = element.className + ' ' + styles.valid;
     messageElement.innerHTML = message;
@@ -560,7 +635,7 @@ function clearFormStyles(element, messageElement) {
   messageElement.innerHTML = '';
 }
 
-//  STYLES - end
+//  FORM STYLES - end
 //--------------------------
 
 function app() {
