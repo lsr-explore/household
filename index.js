@@ -110,7 +110,15 @@ var DataStore = function() {
   };
   this.listeners = [];
   this.postData = function(dataEventName, data, sender) {
-    this.data = this.merge(this.data, data);
+    switch(dataEventName) {
+      case dataEventNames.memberRemoved:
+        var keys = Object.keys(data.household);
+        delete this.data.household[keys[0]];
+        break;
+      default:
+        this.data = this.merge(this.data, data);
+        break;
+    };
 
     logger.log(logger.level.DEBUG, 'Data notification', {
       dataEventName,
@@ -491,9 +499,15 @@ var Household = function(store) {
   }
 
   this.onClick = function(evt) {
-    console.log(evt)
-    
-    console.log(evt.target.attributes[0].value)
+    var id = evt.target.attributes[0].value;
+
+    var household = JSON.parse(JSON.stringify(this.store.data.household));
+
+    this.store.postData(dataEventNames.memberRemoved, {
+      household: {
+        [id]: household[id]
+      }
+    }, this.name);
   }
 
   this.displayRecords = function() {
@@ -503,24 +517,14 @@ var Household = function(store) {
     for (var key in household) {
       var member = household[key];
       tableRow = this.tbody.insertRow(-1);
-      var td = tableRow.insertCell(0)
-      td.setAttribute("align", "center");
-      td.innerHTML = member.id.value;
+      tableRow.setAttribute("align", "center");
 
-      td = tableRow.insertCell(1);
-      td.setAttribute("align", "center");
-      td.innerHTML = member.age.value;
+      tableRow.insertCell(0).innerHTML = member.id.value;
+      tableRow.insertCell(1).innerHTML = member.age.value;
+      tableRow.insertCell(2).innerHTML = member.relationship.value;
+      tableRow.insertCell(3).innerHTML = member.smoking.value;
 
-      td = tableRow.insertCell(2);
-      td.setAttribute("align", "center");
-      td.innerHTML = member.relationship.value;
-
-      td = tableRow.insertCell(3);
-      td.setAttribute("align", "center");
-      td.innerHTML = member.smoking.value;
-
-      td = tableRow.insertCell(4);
-      td.setAttribute("align", "center");
+      var td = tableRow.insertCell(4);
       var button = document.createElement('button');
       button.innerHTML = 'X';
       button.setAttribute('data-name', member.id.value);
@@ -537,6 +541,7 @@ var Household = function(store) {
   this.onDataUpdate = function(dataEventName, sender) {
     switch(dataEventName) {
       case dataEventNames.memberAdded:
+      case dataEventNames.memberRemoved:
         this.displayRecords();
         break;
       default:
