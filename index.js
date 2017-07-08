@@ -78,7 +78,7 @@ var dataEventNames = {
   smoking: 'smoking',
   relationship: 'relationship',
   memberAdded: 'memberAdded',
-  householdSubmitted: 'householdSubmitted',
+  householdSaved: 'householdSaved',
   memberRemoved: 'memberRemoved'
 }
 // DATAEVENTNAMES - end
@@ -221,7 +221,7 @@ var AddControl = function(store) {
     this.store.registerListener(this);
 
     // Add event listeners
-    this.element.addEventListener("click", this.onAdd.bind(this));
+    this.element.addEventListener('click', this.onAdd.bind(this));
 
     // Disable
     this.disableAdd();
@@ -247,6 +247,7 @@ var SubmitControl = function(store) {
         // Ignore
         break;
       case dataEventNames.memberAdded:
+      case dataEventNames.memberRemoved:
         this.enableSubmit();
         break;
       default:
@@ -257,7 +258,7 @@ var SubmitControl = function(store) {
   this.onSubmit = function(evt) {
     evt.preventDefault();
 
-    this.store.postData(dataEventNames.householdSubmitted, { }, this.name);
+    this.store.postData(dataEventNames.householdSaved, { }, this.name);
 
     // Update controls
     this.disableSubmit()
@@ -276,7 +277,7 @@ var SubmitControl = function(store) {
     store.registerListener(this);
 
     // Add event listeners
-    this.element.addEventListener("click", this.onSubmit.bind(this));
+    this.element.addEventListener('click', this.onSubmit.bind(this));
 
     // Disable submit
     this.disableSubmit();
@@ -345,7 +346,7 @@ var AgeControl = function(store) {
   this.initialize = function() {
     store.registerListener(this);
 
-    this.element.addEventListener("blur", this.onBlur.bind(this));
+    this.element.addEventListener('blur', this.onBlur.bind(this));
   }
 
   this.initialize();
@@ -411,8 +412,8 @@ var RelationshipControl = function(store) {
   this.initialize = function() {
     store.registerListener(this);
 
-    this.element.addEventListener("change", this.onChange.bind(this));
-    this.element.addEventListener("blur", this.onChange.bind(this));
+    this.element.addEventListener('change', this.onChange.bind(this));
+    this.element.addEventListener('blur', this.onChange.bind(this));
   };
 
   this.initialize();
@@ -465,7 +466,7 @@ var SmokingControl = function(store) {
   this.initialize = function() {
     store.registerListener(this);
 
-    this.element.addEventListener("change", this.onChange.bind(this));
+    this.element.addEventListener('change', this.onChange.bind(this));
   }
 
   this.initialize();
@@ -517,7 +518,7 @@ var Household = function(store) {
     for (var key in household) {
       var member = household[key];
       tableRow = this.tbody.insertRow(-1);
-      tableRow.setAttribute("align", "center");
+      tableRow.setAttribute('align', 'center');
 
       tableRow.insertCell(0).innerHTML = member.id.value;
       tableRow.insertCell(1).innerHTML = member.age.value;
@@ -528,7 +529,7 @@ var Household = function(store) {
       var button = document.createElement('button');
       button.innerHTML = 'X';
       button.setAttribute('data-name', member.id.value);
-      button.addEventListener("click", this.onClick.bind(this));
+      button.addEventListener('click', this.onClick.bind(this));
       td.appendChild(button);
       
     }
@@ -569,18 +570,20 @@ var SavedHousehold = function(store) {
 
   this.name = 'Saved Household';
 
-  this.drawTable = function() {
-    var table = document.createElement('hr');
-    this.element.appendChild(hr);
-  }
   this.displayResults = function() {
-    document.querySelector(".debug").style="display:block";
-    elems.debug.innerHTML = JSON.stringify(state.saved, null, 2);
+    this.element.style='display:block';
+    this.element.innerHTML = '';
+    var div = document.createElement('div');
+    this.element.appendChild(div);
+    div.innerHTML = JSON.stringify(this.store.data.household, null, 2);
   }
 
   // Stage change handler
   this.onDataUpdate = function(dataEventName, sender) {
     switch(dataEventName) {
+      case dataEventNames.householdSaved: 
+        this.displayResults();
+        break;
       default:
         break;
     };
@@ -603,7 +606,7 @@ function createStyle(name, rules) {
   if ( !(style.sheet || {}).insertRule)  {
     (style.styleSheet || style.sheet).addRule(name, rules);
   } else {
-    style.sheet.insertRule(name+"{"+rules+"}",0);
+    style.sheet.insertRule(name + '{' + rules + '}' ,0);
   }
 }
 
@@ -660,7 +663,7 @@ function app() {
 }
 
 function main() {
-  document.addEventListener("DOMContentLoaded", app);
+  document.addEventListener('DOMContentLoaded', app);
 }
 
 main();
