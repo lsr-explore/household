@@ -1,4 +1,17 @@
+/* jshint browser: true */
+/* jshint -W097 */ /* remove function form of use strict warning */
+
 'use strict';
+//--------------------------
+// SIMULATE_SERVER_POST - begin
+var simulateServerPost = function(data, callback) {
+    setTimeout( function() {
+      logger.log(logger.level.INFO, 'Simulated server callback complete', data);
+      callback(data);
+    }, 4000);
+};
+// SIMULATE_SERVER_POST - end
+//--------------------------
 
 //--------------------------
 // GENERATE_ID - begin
@@ -13,7 +26,7 @@ var generateId = function() {
     rtn += ALPHABET.charAt(Math.floor(Math.random() * ALPHABET.length));
   }
   return rtn;
-}
+};
 // GENERATE_ID - end
 //--------------------------
 
@@ -32,41 +45,43 @@ var logger = {
     switch(this.currentLevel) {
       case this.level.ERROR:
         if (level === this.level.ERROR) {
-          outputMessage = true
+          outputMessage = true;
         }
         break;
       case this.level.WARN:
         if (level === this.level.WARN || level == this.level.ERROR) {
-          outputMessage = true
+          outputMessage = true;
         }
         break;
       case this.level.INFO:
         if (level === this.level.ERROR ||
             level === this.level.WARN ||
             level === this.level.INFO) {
-          outputMessage = true
+          outputMessage = true;
         }
         break;
       case this.level.DEBUG:
-         outputMessage = true
+         outputMessage = true;
         break;
       default:
         if (level === this.level.ERROR) {
-          outputMessage = true
+          outputMessage = true;
         }
         break;
     }
-    var message = Date.now() + ' [' + level + '] | ' + message; 
+    var date = new Date();
+
+    var logMessage = '>>>>>>> ' + date.toString() + ' [' + level + '] | ' + message; 
     if (category) {
-      message += ' | category = ' + category + ' | '
+      logMessage += ' | category = ' + category + ' | ';
     }
     if (data) {
-      message += ' | data = ' + JSON.stringify(data);
+      logMessage += ' | data = ' + JSON.stringify(data);
     }
-    console.log(message)
-    console.log(data)
+    window.console.log(logMessage);
+    window.console.log(data);
   }
-}
+};
 // LOG - end
 //--------------------------
 
@@ -79,8 +94,9 @@ var dataEventNames = {
   relationship: 'relationship',
   memberAdded: 'memberAdded',
   householdSaved: 'householdSaved',
-  memberRemoved: 'memberRemoved'
-}
+  memberRemoved: 'memberRemoved',
+  savingHousehold: 'savingHousehold'
+};
 // DATAEVENTNAMES - end
 //--------------------------
 
@@ -104,6 +120,7 @@ var DataStore = function() {
       value: false
     },
   };
+  this.unsavedChanges = false;
   this.data = {
     currentMember: JSON.parse(JSON.stringify(this.initialCurrentMember)),
     household: {}
@@ -114,25 +131,30 @@ var DataStore = function() {
       case dataEventNames.memberRemoved:
         var keys = Object.keys(data.household);
         delete this.data.household[keys[0]];
+        this.unsavedChanges = true;
+        break;
+      case dataEventNames.householdSaved:
+        this.unsavedChanges = false;
         break;
       default:
         this.data = this.merge(this.data, data);
+        this.unsavedChanges = true;
         break;
-    };
+    }
 
     logger.log(logger.level.DEBUG, 'Data notification', {
-      dataEventName,
-      data,
-      sender
-    })
-    this.listeners.forEach(function(listener) {
-      listener.onDataUpdate(dataEventName, sender);
+      dataEventName: dataEventName,
+      data: data,
+      sender: sender
     });
-  }
+    this.listeners.forEach(function(listener) {
+      listener.onDataUpdate(dataEventName, data, sender);
+    });
+  };
 
   this.registerListener = function(listener) {
-    this.listeners.push(listener)
-  }
+    this.listeners.push(listener);
+  };
 
   this.merge = function (dataObj, dataUpdate) {
     for (var key in dataUpdate) {
@@ -148,7 +170,23 @@ var DataStore = function() {
     }
 
     return dataObj;
-  }
+  };
+
+  this.prepForStore = function(data) {
+    var transformedData = {};
+
+    for (var key in data) {
+      var transformedMember = {};
+      var member = data[key];
+
+      for (var memberKey in member)  {
+        transformedMember[memberKey] = member[memberKey].value;
+      }
+      transformedData[key] = transformedMember;
+    }
+
+    return transformedData;
+  };
 };
 // DATASTORE - end
 //--------------------------
@@ -156,14 +194,14 @@ var DataStore = function() {
 //--------------------------
 // ADDCONTROL - begin
 var AddControl = function(store) {
-  this.selector = 'button.add',
+  this.selector = 'button.add';
   this.element = document.querySelector(this.selector);
 
   this.store = store;
   this.name = 'Add';
 
   // Stage change handler
-  this.onDataUpdate = function(dataEventName, sender) {
+  this.onDataUpdate = function(dataEventName, data, sender) {
     switch(dataEventName) {
       case dataEventNames.resetCurrentMember:
         // Ignore
@@ -176,14 +214,14 @@ var AddControl = function(store) {
           this.disableAdd();
         }
         break;
-    };
+    }
   };
 
   this.validate = function() {
     return (this.store.data.currentMember.relationship.isValid && 
                   this.store.data.currentMember.smoking.isValid &&
-                  this.store.data.currentMember.age.isValid)
-  },
+                  this.store.data.currentMember.age.isValid);
+  };
 
   this.onAdd = function(evt) {
     evt.preventDefault();
@@ -193,10 +231,11 @@ var AddControl = function(store) {
     var id = generateId();
     member.id.value = id;
 
+    var household = {};
+    household[id] = member;
+
     this.store.postData(dataEventNames.memberAdded, {
-      household: {
-        [id]: member
-      }
+      household: household
     }, this.name);
 
     // Reset currentMember state
@@ -234,14 +273,14 @@ var AddControl = function(store) {
 //--------------------------
 // SUBMIT - begin
 var SubmitControl = function(store) {
-  this.selector = 'button[type=\'submit\']',
+  this.selector = 'button[type=\'submit\']';
   this.element = document.querySelector(this.selector);
 
   this.store = store;
   this.name = 'Submit';
 
   // Stage change handler
-  this.onDataUpdate = function(dataEventName, sender) {
+  this.onDataUpdate = function(dataEventName, data, sender) {
     switch(dataEventName) {
       case dataEventNames.resetCurrentMember:
         // Ignore
@@ -252,16 +291,23 @@ var SubmitControl = function(store) {
         break;
       default:
         break;
-    };
+    }
+  };
+
+  this.serverPostComplete = function(data) {
+    this.store.postData(dataEventNames.householdSaved, data, this.name);
   };
 
   this.onSubmit = function(evt) {
     evt.preventDefault();
 
-    this.store.postData(dataEventNames.householdSaved, { }, this.name);
-
     // Update controls
-    this.disableSubmit()
+    this.disableSubmit();
+    this.store.postData(dataEventNames.savingHousehold, { }, this.name);
+
+    var data = this.store.prepForStore(store.data.household);
+
+    simulateServerPost(data, this.serverPostComplete.bind(this));
   };
 
   this.enableSubmit = function() {
@@ -284,22 +330,22 @@ var SubmitControl = function(store) {
   };
 
   this.initialize();
+};
 
-}
 //  SUBMITCONTROL - end
 //--------------------------
 
 //--------------------------
 // AGECONTROL - begin
 var AgeControl = function(store) {
-  this.selector = 'input[name=\'age\']',
+  this.selector = 'input[name=\'age\']';
   this.element = document.querySelector(this.selector);
   this.messageElement = document.createElement('span');
   this.element.parentNode.appendChild(this.messageElement);
   this.store = store;
   this.name = 'Age';
 
-  this.onDataUpdate = function(dataEventName, sender) {
+  this.onDataUpdate = function(dataEventName, data, sender) {
     switch(dataEventName) {
       case dataEventNames.resetCurrentMember:
         this.resetControl();
@@ -312,7 +358,7 @@ var AgeControl = function(store) {
   this.resetControl = function() {
     this.element.value = '';
     clearFormStyles(this.element, this.messageElement);
-  }
+  };
 
   this.onBlur = function(evt) {
     var value = parseFloat(this.getValue());
@@ -326,46 +372,46 @@ var AgeControl = function(store) {
       currentMember: {
         age: {
           isValid: valid,
-          value
+          value: value
         }
       }
     }, this.name);
-  }
+  };
 
   this.validate = function(age) {
     if (age > 0) {
       return true;
     }
     return false;
-  }
+  };
  
   this.getValue = function() {
     return this.element.value;
-  }
+  };
 
   this.initialize = function() {
     store.registerListener(this);
 
     this.element.addEventListener('blur', this.onBlur.bind(this));
-  }
+  };
 
   this.initialize();
 
-}
+};
 // AGE CONTROL - end
 //--------------------------
 
 //--------------------------
 // RELATIONSHIPCONTROL - begin
 var RelationshipControl = function(store) {
-  this.selector = 'select[name=\'rel\']',
+  this.selector = 'select[name=\'rel\']';
   this.element  = document.querySelector(this.selector);
   this.messageElement = document.createElement('span');
   this.element.parentNode.appendChild(this.messageElement);
   this.store = store;
   this.name = 'Relationship';
 
-  this.onDataUpdate = function (dataEventName, sender) {
+  this.onDataUpdate = function (dataEventName, data, sender) {
     switch(dataEventName) {
       case dataEventNames.resetCurrentMember:
           this.resetControl();
@@ -378,7 +424,7 @@ var RelationshipControl = function(store) {
   this.resetControl = function() {
     this.element.value = '';
     clearFormStyles(this.element, this.messageElement);
-  }
+  };
 
   this.onChange = function(evt) {
     var value = this.getValue();
@@ -392,7 +438,7 @@ var RelationshipControl = function(store) {
       currentMember: {
         relationship: {
           isValid: valid,
-          value
+          value: value
         }
       }
     }, this.name);
@@ -438,17 +484,17 @@ var SmokingControl = function(store) {
       currentMember: {
         smoking: {
           isValid: true,
-          value
+          value: value
         }
       }
     }, this.name);
-  }
+  };
 
   this.resetControl = function() {
     this.element.checked = false;
-  }
+  };
 
-  this.onDataUpdate = function (dataEventName, sender) {
+  this.onDataUpdate = function (dataEventName, data, sender) {
     switch(dataEventName) {
       case dataEventNames.resetCurrentMember:
         this.resetControl();
@@ -461,17 +507,17 @@ var SmokingControl = function(store) {
 
   this.getValue = function() {
     return this.element.checked;
-  }
+  };
 
   this.initialize = function() {
     store.registerListener(this);
 
     this.element.addEventListener('change', this.onChange.bind(this));
-  }
+  };
 
   this.initialize();
 
-}
+};
 // SMOKING CONTROL - end
 //--------------------------
 
@@ -482,11 +528,9 @@ var Household = function(store) {
   this.store = store;
   this.selector = 'div.builder';
   this.element = document.querySelector(this.selector);
-  this.hr = document.createElement('hr');
   this.table = document.createElement('table');
   this.tbody = document.createElement('tbody');
   this.table.appendChild(this.tbody);
-  this.element.appendChild(this.hr);
   this.element.appendChild(this.table);
 
   this.createHeader = function() {
@@ -497,19 +541,20 @@ var Household = function(store) {
     row.insertCell(2).innerHTML = 'Relationship';
     row.insertCell(3).innerHTML = 'Smoker?';
     row.insertCell(4).innerHTML = 'Remove';
-  }
+  };
 
   this.onClick = function(evt) {
     var id = evt.target.attributes[0].value;
 
     var household = JSON.parse(JSON.stringify(this.store.data.household));
 
+    var memberToRemove = {}; 
+    memberToRemove[id] = household[id];
+
     this.store.postData(dataEventNames.memberRemoved, {
-      household: {
-        [id]: household[id]
-      }
+      household: memberToRemove
     }, this.name);
-  }
+  };
 
   this.displayRecords = function() {
     var household = this.store.data.household;
@@ -533,13 +578,13 @@ var Household = function(store) {
       td.appendChild(button);
       
     }
-  }
+  };
 
   this.removeRecord = function() {
     this.store.postData(dataEventNames.memberRemoved, { }, this.name);
-  }
+  };
 
-  this.onDataUpdate = function(dataEventName, sender) {
+  this.onDataUpdate = function(dataEventName, data, sender) {
     switch(dataEventName) {
       case dataEventNames.memberAdded:
       case dataEventNames.memberRemoved:
@@ -547,55 +592,110 @@ var Household = function(store) {
         break;
       default:
         break;
-    };
+    }
   };
 
   this.initialize = function() {
     store.registerListener(this);
     this.createHeader();
-  }
+  };
 
   this.initialize();
-
-}
+};
 // HOUSEHOLD CONTROL - end
 //--------------------------
 
 //--------------------------
 //  SAVED HOUSEHOLD CONTROL - begin
 var SavedHousehold = function(store) {
-  this.selector = 'pre.debug';
+  this.name = 'Saved Household';
+  this.selector = 'pre';
   this.element  = document.querySelector(this.selector);
   this.store = store;
 
-  this.name = 'Saved Household';
+  store.registerListener(this);
 
-  this.displayResults = function() {
-    this.element.style='display:block';
-    this.element.innerHTML = '';
+  this.displayResults = function(data) {
+    clearDebug(this.element);
+    showDebug(this.element);
     var div = document.createElement('div');
     this.element.appendChild(div);
-    div.innerHTML = JSON.stringify(this.store.data.household, null, 2);
-  }
+    div.innerHTML = JSON.stringify(data, null, 2);
+  };
 
   // Stage change handler
-  this.onDataUpdate = function(dataEventName, sender) {
+  this.onDataUpdate = function(dataEventName, data, sender) {
     switch(dataEventName) {
       case dataEventNames.householdSaved: 
-        this.displayResults();
+        this.displayResults(data);
         break;
       default:
         break;
-    };
+    }
+  };
+};
+//  SAVED HOUSEHOLD CONTROL - end
+//--------------------------
+
+//--------------------------
+//  STATUS CONTROL - begin
+var StatusControl = function(store) {
+  this.name = 'Status Control';
+  this.selector = 'div.builder';
+  this.store = store;
+  this.element = document.querySelector(this.selector);
+  this.div = document.createElement('div');
+  this.div.className = styles.status;
+  this.element.appendChild(this.div);
+
+  store.registerListener(this);
+
+  this.displayMessage = function(message) {
+    this.div.innerHTML = message;
+
+    setTimeout( function() {
+      this.div.innerHTML = '';
+    }.bind(this), 4000);
   };
 
-  this.initialize = function() {
-    store.registerListener(this);
-  }
+  this.messages = {
+    saved: function() {
+      return 'Household saved';
+    },
+    saving: function() {
+      return 'Saving Household';
+    },
+    added: function(id) {
+      return 'Member id = \'' + id + '\' added to household.';
+    },
+    removed: function(id) {
+      return 'Member id = \'' + id + '\' removed from household.';
+    }
+  };
 
-  this.initialize();
-
-}
+  // Stage change handler
+  this.onDataUpdate = function(dataEventName, data, sender) {
+    var keys;
+    switch(dataEventName) {
+      case dataEventNames.householdSaved: 
+        this.displayMessage(this.messages.saved());
+        break;
+      case dataEventNames.savingHousehold: 
+        this.displayMessage(this.messages.saving());
+        break;
+      case dataEventNames.memberAdded: 
+        keys = Object.keys(data.household);
+        this.displayMessage(this.messages.added(keys[0]));
+        break;
+      case dataEventNames.memberRemoved: 
+        keys = Object.keys(data.household);
+        this.displayMessage(this.messages.removed(keys[0]));
+        break;
+      default:
+        break;
+    }
+  };
+};
 //  SAVED HOUSEHOLD CONTROL - end
 //--------------------------
 
@@ -613,8 +713,11 @@ function createStyle(name, rules) {
 var styles = {
   'valid': 'valid',
   'invalid': 'invalid',
-  'error': 'error'
-}
+  'error': 'error',
+  'status': 'status',
+  'showDebug': 'showDebug',
+  'debug': 'debug'
+};
 
 function createStyles() {
   createStyle('.' + styles.valid, 'border-color: green;');
@@ -622,6 +725,8 @@ function createStyles() {
   createStyle('.' + styles.error, 'color: red;');
   createStyle('table', 'border-collapse: collapse;');
   createStyle('table, th, td', 'border: 1px solid darkgrey; padding: 5px;');
+  createStyle('.' + styles.status, 'background-color: lightgrey; margin: 5px; padding: 5px; text-align: center; min-height: 1em; max-width: 300px;');
+  createStyle('.' + styles.showDebug, 'font-family: monospace; border: 1px solid black; padding: 10px; display: block; max-width: 300px;');
 }
 
 function showValidationState(element, valid, messageElement, message) {
@@ -643,6 +748,20 @@ function clearFormStyles(element, messageElement) {
   messageElement.innerHTML = '';
 }
 
+function clearDebug(element) {
+  element.className = element.className.replace(new RegExp(styles.debug, 'g'), '');
+  element.className = element.className.replace(new RegExp(' ' + styles.debug, 'g'), '');
+  element.className = element.className.replace(new RegExp(' ' + styles.showDebug, 'g'), '');
+  element.className = element.className + ' ' + styles.debug;
+  element.innerHTML = '';
+}
+
+function showDebug(element) {
+  element.className = element.className.replace(new RegExp(' ' + styles.showDebug, 'g'), '');
+  element.className = element.className.replace(new RegExp(' ' + styles.debug, 'g'), '');
+  element.className = element.className + ' ' + styles.showDebug;
+}
+
 //  FORM STYLES - end
 //--------------------------
 
@@ -659,7 +778,17 @@ function app() {
   var smokingControl = new SmokingControl(store);
 
   var savedHousehold = new SavedHousehold(store);
+  var statusControl = new StatusControl(store);
   var household = new Household(store);
+
+  window.addEventListener("beforeunload", function (e) {
+    if (store.unsavedChanges) {
+      var confirmationMessage = "\o/";
+
+      e.returnValue = confirmationMessage;     // Gecko, Trident, Chrome 34+
+      return confirmationMessage;              // Gecko, WebKit, Chrome <34
+    }
+  }.bind(this));
 }
 
 function main() {
