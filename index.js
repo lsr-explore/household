@@ -5,9 +5,10 @@
 //--------------------------
 // SIMULATE_SERVER_POST - begin
 var simulateServerPost = function(data, callback) {
+    var dataToPost = JSON.stringify(data, null, 2);
     setTimeout( function() {
       logger.log(logger.level.INFO, 'Simulated server callback complete', data);
-      callback(data);
+      callback(dataToPost);
     }, 4000);
 };
 // SIMULATE_SERVER_POST - end
@@ -76,7 +77,11 @@ var logger = {
       logMessage += ' | category = ' + category + ' | ';
     }
     if (data) {
-      logMessage += ' | data = ' + JSON.stringify(data);
+      if ((typeof data.data) === 'string') {
+        logMessage += ' | data = ' + data.data;
+      } else {
+        logMessage += ' | data = ' + JSON.stringify(data);
+      }
     }
     window.console.log(logMessage);
     window.console.log(data);
@@ -620,7 +625,7 @@ var SavedHousehold = function(store) {
     showDebug(this.element);
     var div = document.createElement('div');
     this.element.appendChild(div);
-    div.innerHTML = JSON.stringify(data, null, 2);
+    div.innerHTML = data;
   };
 
   // Stage change handler
